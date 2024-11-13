@@ -86,7 +86,7 @@ async function request (url, options) {
       fetch(url, options)
         .then(res => res.json())
         .then(data => resolve([data, null]))
-        .catch(err => resolve([null, error]));
+        .catch(err => resolve([null, err]));
     } catch (unExpectError) {
       reject(uneExpectError);
     }
