@@ -104,9 +104,11 @@ function changeInputValue (selector, value) {
   
   dom.classList.remove("up")
   dom.classList.remove("down")
+  dom.classList.remove("stun")
   
   if (previousValue && value > previousValue) dom.classList.add("up")
   if (previousValue && value < previousValue) dom.classList.add("down")
+  if (previousValue && value == previousValue) dom.classList.add("stun")
   
   dom.value = value;
   window[encodeURI(selector)] = value;
@@ -135,8 +137,6 @@ function resetValue (selector) {
   "btcusd",
   "btcjpy",
   "ethusd",
-  "ethjpy",
-  "etheur",
   "audusd",
   "hkdjpy",
   "usoil",
@@ -147,7 +147,8 @@ function resetValue (selector) {
   }));
 });
 
-const userCurrency = "IDR";
+const userCurrency = localStorage.getItem("userCurrency") || prompt("enter your currency code [Ex: IDR]:").toUpperCase();
+localStorage.setItem("userCurrency", userCurrency);
 
 $("#usdprice-label").innerHTML = `USD/${ userCurrency}`;
 
@@ -179,14 +180,20 @@ $("#pair").addEventListener("change", async function(e){
   
   window.currencyTick = setInterval( async function(){
     window.currencyRate = (await getCurrencyRates(from, [to]))[to];
+    
     let stats = await getPairStats({
       pair: pair,
       lot: $("#lot").value,
       currency: userCurrency
     });
+    let riskValue = Math.floor($("#balance").value * ($("#risk").value * 0.01));
+    let spreadSize = Number(stats.spread) / Number(stats.pip_value);
+    
     changeInputValue("#pipvalue", stats.pip_value.toLocaleString());
+    changeInputValue("#maxpip", Math.floor(riskValue / stats.pip_value));
     changeInputValue("#spread", stats.spread.toLocaleString());
     changeInputValue("#price", window.currencyRate.toLocaleString());
+    changeInputValue("#spreadSize", `${ Number(spreadSize).toFixed(2) } pips / ${ spreadSize * 10 } points`);
   }, 500);
 })
 
@@ -208,7 +215,21 @@ $("#entry").addEventListener("change", function(e){
   let TP = Number(e.target.value) + (points * 2);
   
   changeInputValue("#pips", pips)
-  changeInputValue("#loss", `${ userCurrency }. ${ (pips * Number($("#pipvalue").value)).toLocaleString() }`)
-  changeInputValue("#win", `${ userCurrency }. ${ (pips * Number($("#pipvalue").value) * 2).toLocaleString() }`)
+  changeInputValue("#loss", `${ (pips * Number($("#pipvalue").value)).toLocaleString() } ${ userCurrency }`)
+  changeInputValue("#win", `${ userCurrency }. ${ (pips * Number($("#pipvalue").value) * 2).toLocaleString() } ${ userCurrency }`)
+});
+
+async function riskManagement () {
+  let risk = Number($("#risk").value);
+  let balance = Number($("#balance").value);
+  let riskValue = Math.floor(balance * (risk * 0.01));
+      riskValue = riskValue === 0 ? Number(balance * (risk * 0.01)).toFixed(2) : riskValue;
   
-})
+  $("#riskValue").value = `${ riskValue.toLocaleString() } ${ userCurrency }`;
+}
+
+$("#risk").addEventListener("change", riskManagement);
+$("#balance").addEventListener("change", riskManagement);
+$("#riskValue").addEventListener("change", riskManagement);
+
+riskManagement();
