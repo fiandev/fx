@@ -79,6 +79,27 @@ async function getPairStats ({ pair, lot = 1, currency = "usd"}) {
   return data.data.calculate
 }
 
+function setPosition (entry, type, pips) {
+  let dotPosition = entry.toString().indexOf(".");
+  let entryPoints = getPricePoints(entry);
+  
+  switch (type) {
+    case "SL":
+      entryPoints -= pips * 10;
+    break;
+    case "TP":
+      entryPoints += (pips * 10)*2;
+    break;
+  }
+  
+  let position = (`${ entryPoints.toString().slice(0, dotPosition) }.${ entryPoints.toString().slice(dotPosition) }`);
+  
+  return position
+}
+
+function getPricePoints (price) {
+  return Number(price.toString().replace(".", ""));
+}
 
 async function request (url, options) {
   return new Promise((resolve, reject) => {
@@ -190,12 +211,20 @@ $("#pair").addEventListener("change", async function(e){
     let spreadSize = Number(stats.spread) / Number(stats.pip_value);
     
     changeInputValue("#pipvalue", stats.pip_value.toLocaleString());
-    changeInputValue("#maxpip", Math.floor(riskValue / stats.pip_value));
+    changeInputValue("#maxpip", Math.floor(riskValue / stats.pip_value - Number(spreadSize)));
     changeInputValue("#spread", stats.spread.toLocaleString());
-    changeInputValue("#price", window.currencyRate.toLocaleString());
+    changeInputValue("#price", window.currencyRate);
     changeInputValue("#spreadSize", `${ Number(spreadSize).toFixed(2) } pips / ${ spreadSize * 10 } points`);
-  }, 500);
+    
+    window.stats = stats;
+  }, 250);
+  
+  $("#position-calculator").classList.remove("d-none");
+  $("#risk-reward-calculator").classList.remove("d-none");
+  $("#position-calculator").classList.add("d-flex");
+  $("#risk-reward-calculator").classList.add("d-flex");
 })
+
 
 
 $("#SL").addEventListener("change", function(e){
@@ -204,20 +233,29 @@ $("#SL").addEventListener("change", function(e){
   let pips = Math.floor(points / 10);
   let TP = Number($("#entry").value) + (points * 2);
   
-  console.log(pips)
   changeInputValue("#TP", TP);
   
 });
 
 $("#entry").addEventListener("change", function(e){
-  let points = Number(e.target.value) - Number($("#SL").value);
-  let pips = Math.floor(points / 10);
-  let TP = Number(e.target.value) + (points * 2);
+  if (!$("#maxpip").value) return;
   
-  changeInputValue("#pips", pips)
-  changeInputValue("#loss", `${ (pips * Number($("#pipvalue").value)).toLocaleString() } ${ userCurrency }`)
-  changeInputValue("#win", `${ userCurrency }. ${ (pips * Number($("#pipvalue").value) * 2).toLocaleString() } ${ userCurrency }`)
+  let maxpips = Number($("#maxpip").value);
+  
+  $("#SL").value = setPosition(e.target.value, "SL", maxpips);
+  $("#TP").value = setPosition(e.target.value, "TP", maxpips);
+  
+  riskRewardCalculation();
 });
+
+$("#SL").addEventListener("change", function(e){
+  
+  riskRewardCalculation();
+})
+
+$("#TP").addEventListener("change", function(e){
+  riskRewardCalculation();
+})
 
 async function riskManagement () {
   let risk = Number($("#risk").value);
@@ -226,6 +264,16 @@ async function riskManagement () {
       riskValue = riskValue === 0 ? Number(balance * (risk * 0.01)).toFixed(2) : riskValue;
   
   $("#riskValue").value = `${ riskValue.toLocaleString() } ${ userCurrency }`;
+}
+
+function riskRewardCalculation () {
+  let points = Number(getPricePoints($("#entry").value)) - Number(getPricePoints($("#SL").value));
+  let pips = Math.floor(points / 10);
+  let TP = Number($("#entry").value) + (points * 2);
+  
+  changeInputValue("#pips", pips)
+  changeInputValue("#loss", `${ userCurrency }. ${ (pips * window.stats.pip_value).toLocaleString() }`)
+  changeInputValue("#win", `${ userCurrency }. ${ (pips * window.stats.pip_value * 2).toLocaleString() }`)
 }
 
 $("#risk").addEventListener("change", riskManagement);
