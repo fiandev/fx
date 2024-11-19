@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Cryptocurrency Prices</title>
+        <!-- Bootstrap CSS -->
+        <link
+            href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+            rel="stylesheet"
+        />
+        <style>
+            body {
+                background-color: #000;
+                color: #fff;
+                font-family: Arial, sans-serif;
+            }
+
+            .crypto-card {
+                background-color: #1a1a1a;
+                margin-bottom: 10px;
+                padding: 15px;
+                border-radius: 5px;
+            }
+
+            .crypto-title {
+                font-size: 1.2rem;
+            }
+
+            .crypto-price {
+                font-size: 1.5rem;
+                font-weight: bold;
+            }
+
+            .price-change {
+                font-size: 0.9rem;
+            }
+
+            .price-up {
+                color: #00ff00;
+            }
+
+            .price-down {
+                color: #ff0000;
+            }
+            .up,
+            .down,
+            .stun {
+                font-weight: bold;
+                position: relative;
+            }
+            .up::after,
+            .down::after {
+                position: absolute;
+                right: 0;
+                font-size: 1rem;
+            }
+
+            .stun {
+                color: #767676;
+            }
+            .up {
+                color: green;
+            }
+            .down {
+                color: red;
+            }
+        </style>
+    </head>
+
+    <body>
+        <div class="container mt-4" id="watchLists">
+            <!-- Tambahkan kartu lainnya sesuai data -->
+        </div>
+
+        <!-- Bootstrap JS -->
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+        <script>
+            async function request(url, options) {
+                return new Promise((resolve, reject) => {
+                    try {
+                        fetch(url, options)
+                            .then(res => res.json())
+                            .then(data => resolve([data, null]))
+                            .catch(err => resolve([null, err]));
+                    } catch (unExpectError) {
+                        reject(uneExpectError);
+                    }
+                });
+            }
+
+            async function getCurrencyRates(currency, pairs = ["idr"]) {
+                const url = "https://pwapi.ex2b.com/";
+                const requestData = {
+                    operationName: "GetConversionRates",
+                    variables: {
+                        from: currency.toUpperCase(),
+                        to: (Array.isArray(pairs)
+                            ? pairs
+                            : [pair.toUpperCase()]
+                        )
+                            .map(pair => pair.toUpperCase())
+                            .join(",")
+                    },
+                    query: `query GetConversionRates($from: String!, $to: String!) {
+      rates: allConversionRates(from: $from, to: $to) {
+        from
+        to
+        multiplier
+        __typename
+      }
+    }`
+                };
+
+                const requestOptions = {
+                    method: "POST",
+                    headers: {
+                        Accept: "*/*",
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify(requestData)
+                };
+
+                const [data, error] = await request(url, requestOptions);
+
+                let rates = {};
+
+                for (let rate of data.data.rates) {
+                    pairs.forEach(pair => {
+                        if (rate.to.toUpperCase() === pair.toUpperCase())
+                            rates[pair] = rate.multiplier;
+                    });
+                }
+
+                return rates;
+            }
+
+            function $(selector) {
+                let doms = document.querySelectorAll(selector);
+                return doms.length > 1 ? doms : doms[0];
+            }
+            function setLocalStorageItem(
+                key,
+                value,
+                ttl = 24 * 60 * 60 * 1000
+            ) {
+                // `item` is an object which contains the original value
+                // as well as the time when it's supposed to expire
+                let item = {
+                    value: value,
+                    expiry: ttl ? Date.now() + ttl : null
+                };
+
+                localStorage.setItem(key, JSON.stringify(item));
+            }
+
+            function getLocalStorageItem(key) {
+                let item = localStorage.getItem(key);
+
+                // if the item doesn't exist, return null
+                if (!item) return null;
+
+                item = JSON.parse(item);
+                // compare the expiry time of the item with the current time
+                if (item.expiry && Date.now() > item.expiry) {
+                    // If the item is expired, delete the item from storage and return null
+                    localStorage.removeItem(key);
+
+                    return null;
+                }
+
+                return item.value;
+            }
+
+            function changeValue(selector, value) {
+                const previousValue =
+                    getLocalStorageItem(encodeURI(selector)) || null;
+                const dom = $(selector);
+
+                dom.classList.remove("up");
+                dom.classList.remove("down");
+                dom.classList.remove("stun");
+
+                value = Number(Number(value).toFixed(3));
+
+                if (previousValue && value > previousValue)
+                    dom.classList.add("up");
+                if (previousValue && value < previousValue)
+                    dom.classList.add("down");
+                if (previousValue && value == previousValue)
+                    dom.classList.add("stun");
+
+                dom.innerHTML = value.toLocaleString();
+                setLocalStorageItem(encodeURI(selector), value);
+            }
+            function changePercentage(pair, selector, value) {
+                const previousValue = getLocalStorageItem(encodeURI(`previousValue-${pair}`)) || 0;
+                const dom = $(selector);
+
+                dom.classList.remove("up");
+                dom.classList.remove("down");
+                dom.classList.remove("stun");
+
+                value = Number(Number(value).toFixed(2));
+                
+                if (previousValue && value > previousValue)
+                    dom.classList.add("up");
+                if (previousValue && value < previousValue)
+                    dom.classList.add("down");
+                if (previousValue && value == previousValue)
+                    dom.classList.add("stun");
+
+                if (previousValue && previousValue !== value) {
+                    dom.innerHTML = `${
+                        value == previousValue
+                            ? ""
+                            : value > previousValue
+                            ? "+"
+                            : ""
+                    }${
+                        new Set(Number(value - previousValue).toFixed(4).split(".").pop().split("")).size === 1 
+                        ? Number(value - previousValue).toFixed(2)
+                        : Number(value - previousValue).toFixed(4)
+                    } / ${
+                        ((value - previousValue) / previousValue) * 100 > 0
+                            ? "+"
+                            : ""
+                    }${Number(
+                        ((value - previousValue) / previousValue) * 100
+                    ).toFixed(2)} %`;
+                }
+                if (!previousValue) setLocalStorageItem(encodeURI(`previousValue-${pair}`), value);
+            }
+
+            (async () => {
+                const pairs = [
+                    "usd/jpy",
+                    "usd/rub",
+                    "usd/bdt",
+                    "usd/bhd",
+                    "eur/usd",
+                    "gbp/usd",
+                    "xau/usd",
+                    "xau/aud",
+                    "btc/usd",
+                    "btc/jpy",
+                    "btc/eur",
+                    "btc/idr",
+                    "eth/usd",
+                    "sol/usd",
+                    "xrp/usd",
+                    "bnb/usd",
+                    "dot/usd",
+                    "fil/usd",
+                    "matic/usd",
+                    "link/usd",
+                    "hbar/usd",
+                    "uni/usd",
+                    "mana/usd",
+                    "theta/usd",
+                    "ada/usd",
+                    "ltc/usd",
+                    "enj/usd",
+                    "aud/usd",
+                    "hkd/jpy",
+                    "usd/idr",
+                    "usd/cad",
+                    "usd/krw",
+                    "usd/myr",
+                    "usd/zar",
+                    "usd/chf",
+                    "myr/idr",
+                    "jpy/idr",
+                    "sgd/usd",
+                    "sgd/idr"
+                ];
+                
+                let pairNames = pairs.map(pair => pair.replace("/", "")).sort().reverse();
+                
+                for (let i = 0; i < pairNames.length; i++) {
+                    let pairName = pairNames[i];
+                    
+                    for (let j = 0; j < pairs.length; j++) {
+                      let pair = pairs[j];
+                      
+                      if (pair.replace("/", "") === pairName) {
+                        
+                          setInterval(async () => {
+                              console.log(`[update]: ${pair}`);
+                              let [from, to] = pair.split("/");
+                              let rate = (await getCurrencyRates(from, [to]))[to];
+      
+                              if ($(`#price-${pairName}`)) {
+                                  changeValue(`#price-${pairName}`, rate);
+                                  changePercentage(
+                                      pairName,
+                                      `#move-percentage-${pairName}`,
+                                      rate
+                                  );
+                              } else {
+                                  $("#watchLists").insertAdjacentHTML(
+                                      "afterend",
+                                      `
+                  <div class="crypto-card">
+                    <div class="row">
+                        <div class="col-4">
+                            <span class="crypto-title">${pairName.toUpperCase()}</span> <br>
+                            <small>${from.toUpperCase()} / ${to.toUpperCase()}</small>
+                        </div>
+                        <div class="col-8 text-end">
+                            <span id="price-${pairName}" class="crypto-price">~</span> <br>
+                            <span id="move-percentage-${pairName}" class="price-change price-down">~</span>
+                        </div>
+                    </div>
+                </div>
+              `
+                                  );
+                                  changeValue(`#price-${pairName}`, rate);
+                                  changePercentage(
+                                      pairName,
+                                      `#move-percentage-${pairName}`,
+                                      rate
+                                  );
+                              }
+                          }, 100);
+                      }
+                      
+                    }
+                }
+            })();
+        </script>
+        <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+        <script>
+            eruda.init();
+        </script>
+    </body>
+</html>
